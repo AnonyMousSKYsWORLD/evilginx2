@@ -1328,7 +1328,7 @@ func (p *HttpProxy) injectJavascriptIntoBody(body []byte, script string, src_url
 	if m_nonce != nil {
 		js_nonce = " nonce=\"" + m_nonce[1] + "\""
 	}
-	re := regexp.MustCompile(`(?i)(<\s*/body\s*>)`)
+	re := regexp.MustCompile(`(?i)(<\s*/head\s*>)`)
 	var d_inject string
 	if script != "" {
 		d_inject = "<script" + js_nonce + ">" + script + "</script>\n${1}"
